@@ -78,7 +78,7 @@ if !has("gui_running")
     let &t_ut=''
 endif
 
-if !has("nvim") 
+if !has("nvim")
     set guioptions=cegmt
 endif
 if has("win32")
@@ -145,11 +145,22 @@ map <D-S-}> :tabprevious
 map <leader>y "+y
 map <leader>p "+p
 
+" Window management
+nmap <leader>v :vsp<cr> " Vertical split
+nmap <leader>s :sp<cr> " Horizontal split
+
+
 " Get rid of search highlights
 noremap <silent><leader>/ :nohlsearch<cr>
+noremap <silent><leader>h :nohlsearch<cr>
 
 " Command to write as root if we dont' have permission
 cmap w!! %!sudo tee > /dev/null %
+
+" File management
+nmap <leader>q :q<cr> " Close the current window
+nmap <leader>Q :qa<cr> " Close all windows
+nmap <leader>w :w<cr> " Write the current file
 
 " Expand in command mode to the path of the currently open file
 cnoremap %% <C-R>=expand('%:h').'/'<CR>
