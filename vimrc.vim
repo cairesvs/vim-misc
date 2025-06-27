@@ -117,14 +117,14 @@ nmap <leader>cd :cd %:h<CR>
 nmap <leader>lcd :lcd %:h<CR>
 
 " Shortcut to edit the vimrc
-if has("nvim")
-    nmap <silent> <leader>vimrc :e ~/nvim/init.vim<CR>
-else
-    nmap <silent> <leader>vimrc :e ~/.vimrc<CR>
-endif
+" if has("nvim")
+"     nmap <silent> <leader>vimrc :e ~/nvim/init.vim<CR>
+" else
+"     nmap <silent> <leader>vimrc :e ~/.vimrc<CR>
+" endif
 
 " Shortcut to edit the vimmisc
-nmap <silent> <leader>vimmisc :execute "e " . g:vim_home_path . "/plugged/vim-misc/vimrc.vim"<CR>
+" nmap <silent> <leader>vimmisc :execute "e " . g:vim_home_path . "/plugged/vim-misc/vimrc.vim"<CR>
 
 " Make navigating around splits easier
 nnoremap <C-j> <C-w>j

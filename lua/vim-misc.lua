@@ -46,10 +46,39 @@ end
 
 -- Use a loop to conveniently call 'setup' on multiple servers and
 -- map buffer local keybindings when the language server attaches
-local servers = { "gopls", "pyright" }
+local servers = { "gopls" }
 for _, lsp in ipairs(servers) do
   nvim_lsp[lsp].setup { on_attach = on_attach }
 end
+
+-- For python, we use pyright with ruff as the linter/formatter/organise imports.
+nvim_lsp.ruff_lsp.setup {
+  on_attach = on_attach,
+  settings = {
+    ruff = {
+      enable = true,
+      lintMode = "on",
+      formatMode = "on",
+      organizeImportsMode = "on",
+    },
+  },
+}
+
+nvim_lsp.pyright.setup {
+  on_attach = on_attach,
+  settings = {
+    pyright = {
+      -- Using Ruff's import organizer
+      disableOrganizeImports = true,
+    },
+    python = {
+      analysis = {
+        -- Ignore all files for analysis to exclusively use Ruff for linting
+        ignore = { '*' },
+      },
+    },
+  },
+}
 
 ---------------------------------------------------------------------
 -- Treesitter
