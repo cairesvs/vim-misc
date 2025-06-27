@@ -45,30 +45,66 @@ local on_attach = function(client, bufnr)
 
   -- Additional import-related mappings for Python files
   if vim.bo[bufnr].filetype == 'python' then
-    buf_set_keymap('n', ';oi', '<cmd>lua vim.lsp.buf.execute_command({command = "ruff.applyOrganizeImports", arguments = {{uri = vim.uri_from_bufnr(0)}}})<CR>', opts)
-    buf_set_keymap('n', ';rf', '<cmd>lua require("vim-misc-utils").fix_and_organize_imports()<CR>', opts)
+    buf_set_keymap('n', ';oi', '<cmd>lua _G.organize_imports()<CR>', opts)
+    buf_set_keymap('n', ';rf', '<cmd>lua _G.fix_and_organize_imports()<CR>', opts)
   end
 end
 
 -- Utility functions for import handling
-local M = {}
-M.fix_and_organize_imports = function()
-  -- First organize imports with Ruff
-  vim.lsp.buf.execute_command({
-    command = 'ruff.applyOrganizeImports',
-    arguments = { { uri = vim.uri_from_bufnr(0) } },
-  })
-  -- Then apply Ruff autofixes
-  vim.defer_fn(function()
-    vim.lsp.buf.execute_command({
-      command = 'ruff.applyAutofix',
+_G.organize_imports = function()
+  -- Try different possible Ruff commands for organizing imports
+  local commands_to_try = {
+    "ruff.applyOrganizeImports",
+    "ruff-lsp.organizeImports",
+    "source.organizeImports.ruff",
+    "source.organizeImports"
+  }
+
+  for _, cmd in ipairs(commands_to_try) do
+    local success = pcall(vim.lsp.buf.execute_command, {
+      command = cmd,
       arguments = { { uri = vim.uri_from_bufnr(0) } },
     })
-  end, 100)
+    if success then
+      return
+    end
+  end
+
+  -- Fallback: use LSP formatting with source.organizeImports
+  vim.lsp.buf.code_action({
+    context = { only = { "source.organizeImports" } },
+    apply = true,
+  })
 end
 
--- Store utility functions globally so they can be accessed
-_G["vim-misc-utils"] = M
+_G.fix_and_organize_imports = function()
+  -- First try to organize imports
+  _G.organize_imports()
+
+  -- Then try autofix
+  vim.defer_fn(function()
+    local autofix_commands = {
+      "ruff.applyAutofix",
+      "ruff-lsp.autofix"
+    }
+
+    for _, cmd in ipairs(autofix_commands) do
+      local success = pcall(vim.lsp.buf.execute_command, {
+        command = cmd,
+        arguments = { { uri = vim.uri_from_bufnr(0) } },
+      })
+      if success then
+        return
+      end
+    end
+
+    -- Fallback: use code action for fixes
+    vim.lsp.buf.code_action({
+      context = { only = { "source.fixAll" } },
+      apply = true,
+    })
+  end, 200)
+end
 
 -- Use a loop to conveniently call 'setup' on multiple servers and
 -- map buffer local keybindings when the language server attaches
@@ -78,7 +114,7 @@ for _, lsp in ipairs(servers) do
 end
 
 -- For python, we use pyright with ruff as the linter/formatter/organise imports.
-nvim_lsp.ruff.setup {
+nvim_lsp.ruff_lsp.setup {
   on_attach = function(client, bufnr)
     -- Disable Ruff's hover to avoid conflicts with Pyright
     client.server_capabilities.hoverProvider = false
@@ -135,11 +171,8 @@ nvim_lsp.pyright.setup {
 vim.api.nvim_create_autocmd("BufWritePre", {
   pattern = "*.py",
   callback = function()
-    -- Organize imports with Ruff before saving
-    vim.lsp.buf.execute_command({
-      command = 'ruff.applyOrganizeImports',
-      arguments = { { uri = vim.uri_from_bufnr(0) } },
-    })
+    -- Use the same organize function
+    _G.organize_imports()
   end,
 })
 
@@ -156,10 +189,7 @@ vim.api.nvim_create_user_command('PyImportMissing', function()
 end, { desc = 'Apply import fixes' })
 
 vim.api.nvim_create_user_command('PyOrganizeImports', function()
-  vim.lsp.buf.execute_command({
-    command = 'ruff.applyOrganizeImports',
-    arguments = { { uri = vim.uri_from_bufnr(0) } },
-  })
+  _G.organize_imports()
 end, { desc = 'Organize imports with Ruff' })
 
 ---------------------------------------------------------------------
