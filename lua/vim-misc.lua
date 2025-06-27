@@ -42,7 +42,33 @@ local on_attach = function(client, bufnr)
   buf_set_keymap('n', ']d', '<cmd>lua vim.diagnostic.goto_next()<CR>', opts)
   buf_set_keymap('n', ';q', '<cmd>lua vim.diagnostic.setloclist()<CR>', opts)
   buf_set_keymap("n", ";f", "<cmd>lua vim.lsp.buf.format()<CR>", opts)
+
+  -- Additional import-related mappings for Python files
+  if vim.bo[bufnr].filetype == 'python' then
+    buf_set_keymap('n', ';oi', '<cmd>lua vim.lsp.buf.execute_command({command = "ruff.applyOrganizeImports", arguments = {{uri = vim.uri_from_bufnr(0)}}})<CR>', opts)
+    buf_set_keymap('n', ';rf', '<cmd>lua require("vim-misc-utils").fix_and_organize_imports()<CR>', opts)
+  end
 end
+
+-- Utility functions for import handling
+local M = {}
+M.fix_and_organize_imports = function()
+  -- First organize imports with Ruff
+  vim.lsp.buf.execute_command({
+    command = 'ruff.applyOrganizeImports',
+    arguments = { { uri = vim.uri_from_bufnr(0) } },
+  })
+  -- Then apply Ruff autofixes
+  vim.defer_fn(function()
+    vim.lsp.buf.execute_command({
+      command = 'ruff.applyAutofix',
+      arguments = { { uri = vim.uri_from_bufnr(0) } },
+    })
+  end, 100)
+end
+
+-- Store utility functions globally so they can be accessed
+_G["vim-misc-utils"] = M
 
 -- Use a loop to conveniently call 'setup' on multiple servers and
 -- map buffer local keybindings when the language server attaches
@@ -52,33 +78,89 @@ for _, lsp in ipairs(servers) do
 end
 
 -- For python, we use pyright with ruff as the linter/formatter/organise imports.
-nvim_lsp.ruff_lsp.setup {
-  on_attach = on_attach,
-  settings = {
-    ruff = {
-      enable = true,
-      lintMode = "on",
-      formatMode = "on",
-      organizeImportsMode = "on",
-    },
+nvim_lsp.ruff.setup {
+  on_attach = function(client, bufnr)
+    -- Disable Ruff's hover to avoid conflicts with Pyright
+    client.server_capabilities.hoverProvider = false
+    client.server_capabilities.renameProvider = false
+    client.server_capabilities.definitionProvider = false
+    client.server_capabilities.referencesProvider = false
+
+    -- Call the standard on_attach
+    on_attach(client, bufnr)
+  end,
+  init_options = {
+    settings = {
+      -- Configure Ruff for import organization and linting
+      args = {
+        "--select=I,F401,F403,F405,E,W", -- Import + basic linting rules
+        "--fix",
+      },
+    }
   },
 }
 
 nvim_lsp.pyright.setup {
-  on_attach = on_attach,
+  on_attach = function(client, bufnr)
+    -- Enable auto-import completion resolution
+    client.server_capabilities.completionProvider.resolveProvider = true
+
+    -- Call the standard on_attach
+    on_attach(client, bufnr)
+  end,
   settings = {
     pyright = {
-      -- Using Ruff's import organizer
+      -- Let Ruff handle import organization, but keep Pyright's import suggestions
       disableOrganizeImports = true,
     },
     python = {
       analysis = {
-        -- Ignore all files for analysis to exclusively use Ruff for linting
-        ignore = { '*' },
+        -- FIXED: Remove the ignore = { '*' } to enable import suggestions
+        -- Keep Pyright active for import suggestions and type checking
+        autoImportCompletions = true,
+        autoSearchPaths = true,
+        useLibraryCodeForTypes = true,
+        diagnosticMode = "openFilesOnly", -- Better performance
+        typeCheckingMode = "basic",
+
+        -- Enable import-related features
+        reportMissingImports = true,
+        reportMissingTypeStubs = false,
       },
     },
   },
 }
+
+-- Auto-organize imports on save for Python files
+vim.api.nvim_create_autocmd("BufWritePre", {
+  pattern = "*.py",
+  callback = function()
+    -- Organize imports with Ruff before saving
+    vim.lsp.buf.execute_command({
+      command = 'ruff.applyOrganizeImports',
+      arguments = { { uri = vim.uri_from_bufnr(0) } },
+    })
+  end,
+})
+
+-- Custom commands for import management
+vim.api.nvim_create_user_command('PyImportMissing', function()
+  vim.lsp.buf.code_action({
+    filter = function(action)
+      return action.kind == 'quickfix' or
+             string.match(action.title:lower(), 'import') or
+             string.match(action.title:lower(), 'add')
+    end,
+    apply = true,
+  })
+end, { desc = 'Apply import fixes' })
+
+vim.api.nvim_create_user_command('PyOrganizeImports', function()
+  vim.lsp.buf.execute_command({
+    command = 'ruff.applyOrganizeImports',
+    arguments = { { uri = vim.uri_from_bufnr(0) } },
+  })
+end, { desc = 'Organize imports with Ruff' })
 
 ---------------------------------------------------------------------
 -- Treesitter
